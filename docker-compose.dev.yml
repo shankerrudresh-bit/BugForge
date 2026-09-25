@@ -1,0 +1,69 @@
+version: "3.9"
+
+services:
+  # ── BugForge Platform ─────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bugforge
+      POSTGRES_PASSWORD: bugforge
+      POSTGRES_DB: bugforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bugforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://bugforge:bugforge@db:5432/bugforge
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
+      WATSONX_PROJECT_ID: ${WATSONX_PROJECT_ID:-}
+      WATSONX_API_URL: ${WATSONX_API_URL:-https://us-south.ml.cloud.ibm.com}
+      DOCKER_SOCKET_PATH: /var/run/docker.sock
+      LLM_REPORT_NARRATIVE: ${LLM_REPORT_NARRATIVE:-false}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+
+  # ── Sample Fault-Injection Target ─────────────────────────────────────────
+  sample-api:
+    build: ./sample-target
+    container_name: bugforge-sample-api
+    ports:
+      - "8080:8080"
+
+  sample-db:
+    image: postgres:16-alpine
+    container_name: bugforge-sample-db
+    environment:
+      POSTGRES_USER: sample
+      POSTGRES_PASSWORD: sample
+      POSTGRES_DB: sampledb
+    ports:
+      - "5433:5432"
+
+volumes:
+  postgres_data:

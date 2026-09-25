@@ -1,7 +1,7 @@
 # Required
 DATABASE_URL=postgresql://bugforge:bugforge@localhost:5432/bugforge
 LLM_PROVIDER=openai
-LLM_API_KEY=your-api-key-here
+LLM_API_KEY=your_api_key_here
 LLM_MODEL=gpt-4o
 
 # Required only for IBM watsonx provider
