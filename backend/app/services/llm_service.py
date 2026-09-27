@@ -133,8 +133,115 @@ def _call_watsonx(user_prompt: str) -> str:
     return response.results[0].generated_text if response.results else ""
 
 
+def _mock_scenarios(arch: ArchitectureCreate, num_scenarios: int) -> list[dict[str, Any]]:
+    """Return realistic pre-built scenarios when no LLM API key is configured.
+
+    Uses the first 3 service names from the architecture so the scenarios
+    look tailored to what the user entered.
+    """
+    names = [s.name for s in arch.services]
+    svc0 = names[0] if len(names) > 0 else "service-a"
+    svc1 = names[1] if len(names) > 1 else "service-b"
+    svc2 = names[2] if len(names) > 2 else "service-c"
+
+    all_mocks = [
+        {
+            "title": f"Database Crash During Peak CPU Load on {svc0}",
+            "description": (
+                f"Kills {svc1} while {svc0} is under heavy CPU pressure. "
+                "Exposes missing retry logic and connection-pool exhaustion."
+            ),
+            "steps": [
+                {
+                    "step_index": 0,
+                    "fault_type": "cpu_stress",
+                    "target_service": svc0,
+                    "duration_seconds": 60,
+                    "parameters": {"cpu_cores": 1, "load_pct": 80},
+                    "description": f"Simulate traffic spike on {svc0}",
+                },
+                {
+                    "step_index": 1,
+                    "fault_type": "kill_container",
+                    "target_service": svc1,
+                    "duration_seconds": 30,
+                    "parameters": {},
+                    "description": f"Abruptly terminate {svc1} during CPU stress",
+                },
+            ],
+        },
+        {
+            "title": f"Network Partition + Memory Exhaustion",
+            "description": (
+                f"Disconnects {svc1} from the network while {svc2} exhausts memory. "
+                "Tests whether the system degrades gracefully or cascades."
+            ),
+            "steps": [
+                {
+                    "step_index": 0,
+                    "fault_type": "memory_stress",
+                    "target_service": svc2,
+                    "duration_seconds": 45,
+                    "parameters": {"memory_mb": 256},
+                    "description": f"Fill {svc2} RAM to trigger OOM pressure",
+                },
+                {
+                    "step_index": 1,
+                    "fault_type": "network_partition",
+                    "target_service": svc1,
+                    "duration_seconds": 30,
+                    "parameters": {},
+                    "description": f"Isolate {svc1} from all other services",
+                },
+            ],
+        },
+        {
+            "title": f"Latency Injection + Process Freeze",
+            "description": (
+                f"Adds 300ms network jitter to {svc0} then pauses {svc1} entirely. "
+                "Reveals timeout misconfigurations and missing circuit breakers."
+            ),
+            "steps": [
+                {
+                    "step_index": 0,
+                    "fault_type": "inject_latency",
+                    "target_service": svc0,
+                    "duration_seconds": 40,
+                    "parameters": {"delay_ms": 300, "jitter_ms": 100},
+                    "description": f"Inject 300ms ±100ms latency on {svc0}",
+                },
+                {
+                    "step_index": 1,
+                    "fault_type": "pause_container",
+                    "target_service": svc1,
+                    "duration_seconds": 20,
+                    "parameters": {},
+                    "description": f"Freeze {svc1} processes (SIGSTOP)",
+                },
+                {
+                    "step_index": 2,
+                    "fault_type": "cpu_stress",
+                    "target_service": svc2,
+                    "duration_seconds": 30,
+                    "parameters": {"cpu_cores": 1, "load_pct": 90},
+                    "description": f"Overload {svc2} while {svc1} is frozen",
+                },
+            ],
+        },
+    ]
+    return all_mocks[:num_scenarios]
+
+
 def generate_scenarios(arch: ArchitectureCreate, num_scenarios: int = 3) -> list[dict[str, Any]]:
-    """Call the configured LLM and return a list of raw scenario dicts."""
+    """Call the configured LLM and return a list of raw scenario dicts.
+
+    Falls back to realistic mock scenarios when LLM_API_KEY is not set —
+    so the app is fully usable for demos without an API key.
+    """
+    if not settings.LLM_API_KEY:
+        logger.info("LLM_API_KEY not set — returning mock scenarios for demo mode")
+        return _mock_scenarios(arch, num_scenarios)
+
     user_prompt = _build_user_prompt(arch, num_scenarios)
 
     for attempt in range(2):

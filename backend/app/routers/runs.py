@@ -1,6 +1,7 @@
 """Runs router — create and monitor chaos runs."""
 import asyncio
 import json
+import threading
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
@@ -25,8 +26,9 @@ router = APIRouter(tags=["runs"])
 
 
 def _enqueue_run(run_id: int) -> None:
-    """Entry point for BackgroundTasks — bridges sync→async."""
-    asyncio.run(execute_run(run_id))
+    """Spin up a daemon thread to run the synchronous executor."""
+    t = threading.Thread(target=execute_run, args=(run_id,), daemon=True)
+    t.start()
 
 
 @router.post("/runs", response_model=RunResponse, status_code=201)

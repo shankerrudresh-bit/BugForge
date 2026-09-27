@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.routers import architectures, scenarios, runs
 
@@ -20,6 +21,12 @@ app.add_middleware(
 app.include_router(architectures.router, prefix="/api")
 app.include_router(scenarios.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Redirect root to the interactive API docs."""
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health")

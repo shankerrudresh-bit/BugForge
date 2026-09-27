@@ -48,13 +48,20 @@ export default function NewArchitecturePage() {
     setLoading(true);
     setError("");
     try {
+      // Step 1: save architecture (always succeeds — no LLM needed)
       const arch = await createArchitecture({ name, description, services });
-      // Immediately kick off scenario generation
-      await generateScenarios(arch.id, 3);
+
+      // Step 2: generate scenarios (best-effort — backend uses mock if no API key)
+      try {
+        await generateScenarios(arch.id, 3);
+      } catch {
+        // Generation failed (e.g. no API key) — user can regenerate from the scenarios page
+      }
+
       router.push(`/architectures/${arch.id}/scenarios`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setError(`Failed: ${msg}`);
+      setError(`Failed to save architecture: ${msg}`);
     } finally {
       setLoading(false);
     }
